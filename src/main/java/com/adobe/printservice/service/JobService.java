@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -56,6 +57,18 @@ public class JobService {
                     job.setUpdatedAt(Instant.now());
                     return jobRepository.save(job);
                 });
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Job> getJob(String id) {
+        return jobRepository.findById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Job> listJobs(Optional<JobStatus> status) {
+        return status
+                .map(jobRepository::findAllByStatusOrderByCreatedAtAsc)
+                .orElseGet(jobRepository::findAllByOrderByCreatedAtAsc);
     }
 
     @Transactional
