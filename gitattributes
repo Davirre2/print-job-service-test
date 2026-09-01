@@ -1,0 +1,13 @@
+# Normalize line endings for the repo, but pin the Maven wrapper scripts
+# to the endings their platform actually needs, regardless of who checks
+# the repo out or what their core.autocrlf is set to.
+* text=auto eol=lf
+
+mvnw text eol=lf
+*.sh text eol=lf
+
+mvnw.cmd text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.jar binary
