@@ -25,6 +25,9 @@ services:
       DB_NAME: printservice
       DB_USER: printservice
       DB_PASSWORD: printservice
+      WORKER_POLL_DELAY_MS: 3000
+      RENDER_DELAY_MS: 2000
+      RENDER_TRANSIENT_FAILURE_PROBABILITY: 1
     depends_on:
       postgres:
         condition: service_healthy

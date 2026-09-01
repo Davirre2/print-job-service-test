@@ -85,22 +85,25 @@ public class JobService {
     }
 
     @Transactional
-    public void markAttemptFailed(String jobId, String errorMessage) {
-        jobRepository.findById(jobId).ifPresent(job -> {
-            if (job.getStatus() != JobStatus.PROCESSING) {
-                return;
-            }
+    public boolean markAttemptFailed(String jobId, String errorMessage) {
+        return jobRepository.findById(jobId)
+                .filter(job -> job.getStatus() == JobStatus.PROCESSING)
+                .map(job -> {
+                    job.setErrorMessage(errorMessage);
+                    job.setUpdatedAt(Instant.now());
 
-            job.setErrorMessage(errorMessage);
-            job.setUpdatedAt(Instant.now());
+                    boolean willRetry = job.getAttempts() < MAX_ATTEMPTS;
 
-            if (job.getAttempts() < MAX_ATTEMPTS) {
-                job.setStatus(JobStatus.QUEUED);
-            } else {
-                job.setStatus(JobStatus.FAILED);
-            }
+                    if (willRetry) {
+                        job.setStatus(JobStatus.QUEUED);
+                    } else {
+                        job.setStatus(JobStatus.FAILED);
+                    }
 
-            jobRepository.save(job);
-        });
+                    jobRepository.save(job);
+
+                    return willRetry;
+                })
+                .orElse(false);
     }
 }
