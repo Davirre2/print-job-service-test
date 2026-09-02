@@ -76,18 +76,71 @@ need to build template management. Your job is to implement the render job lifec
   the starting point for the design discussion, not a design doc.
 - **Once the code is complete, reply to your hiring contact with a link to your repository.**
 
-### A few things we deliberately left open
+### Design Decisions
 
-We're not going to tell you how to implement the queue/worker, the retry policy, or what your
-readiness check should verify - that's for you to decide.
+**Queue / worker.** `JobWorker` is a `@Scheduled` poller
+that asks the database for the oldest `QUEUED` job via
+`SELECT ... FOR UPDATE` (`JobRepository.findNextJobForUpdate`), so a single row lock is what
+prevents two callers from claiming the same job. On top of that, a distributed lock
+(`WorkerLockService`) restricts *which instance* even attempts to claim work: in production it
+uses a PostgreSQL transaction-scoped advisory lock (`pg_try_advisory_xact_lock`), released
+automatically when the claiming transaction commits. Claiming a job is its own short transaction that
+commits before rendering starts, so the simulated render never holds a DB lock open.
+`POST /jobs` only ever writes a row and returns. The worker discovers new work purely by polling,
+so submission and processing are fully decoupled.
+
+**Retry policy.** `Job.attempts` is incremented each time a job is claimed, before rendering is
+attempted. `JobService.MAX_ATTEMPTS = 3` on a transient render failure the job goes back to
+`QUEUED` as long as `attempts < MAX_ATTEMPTS`. Once the 3rd attempt also fails it moves to `FAILED`
+with the last error message recorded. There's no backoff delay between attempts beyond the
+worker's own poll interval. "render.transient-failure-probability is configurable, 
+which is how the retry path was exercised during testing"
+
+**Readiness.** `/health/readiness` checks each dependency independently (currently: database
+connectivity, plus a storage-accessibility placeholder) and returns `200` with `ready: true` only if all of them are
+`UP`; if any is `DOWN` it returns `503` with a `details` map showing which one failed. Liveness
+(`/health/liveness`) deliberately does *not* touch the database - it only confirms the JVM/HTTP
+layer is responding, so a temporarily slow database doesn't get a healthy process killed by an
+orchestrator's liveness probe when a readiness failure would be the correct signal instead.
 
 
 ### Optional (not required to complete the exercise)
+
+The optional parts of the exercise have been completed and can be found in the project.
 
 - Demonstrate that running two instances of your app against the same database does not cause a
   job to be processed twice.
 - A Kubernetes `Deployment`/`Service` manifest for this app (it does not need to be applied to a
   real cluster - we're interested in the manifest itself, e.g. how you wire up probes).
+
+### Added endpoints
+
+Job lifecycle:
+
+- `GET /jobs/{id}`
+- `GET /jobs?status=<STATUS>`: `status` is optional
+  (`QUEUED` / `PROCESSING` / `DONE` / `FAILED`); omit it to list every job. `400` if `status` isn't
+  one of those four values.
+- `GET /jobs/{id}/result`: the rendered output, once the job is `DONE`. `200` with the result
+  body; `404` if the id doesn't exist; `409` if the job exists but hasn't finished yet or ended in
+  `FAILED`.
+
+Health:
+
+- `GET /health/liveness`: `200` with `{"status": "UP"}` whenever the process is up. Doesn't check
+  any dependency on purpose (see Design Decisions).
+- `GET /health/readiness`: `200` with `{"status": "UP", "ready": true, "details": {...}}` when
+  every checked dependency is healthy; `503` with `ready: false` and the failing check(s) named in
+  `details` otherwise.
+- For readiness, storage is hardcoded to be `"UP"`.
+If the `"DOWN"` outcome is wanted, the variables must be modified.
+
+Metrics (`/objects_count`):
+- `GET /objects_count`: total jobs and total templates.
+- `GET /objects_count/jobs`: total jobs only.
+- `GET /objects_count/jobs/status/{status}`: job count for one status (`400` for an invalid
+  status).
+- `GET /objects_count/templates`: total templates only.
 
 ### How to run
 
