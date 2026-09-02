@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -16,23 +17,38 @@ public class JobWorker {
 
     private final JobService jobService;
     private final RenderService renderService;
+    private final WorkerLockService workerLockService;
 
     private static final Logger log = LoggerFactory.getLogger(JobWorker.class);
 
-    public JobWorker(JobService jobService, RenderService renderService) {
+    public JobWorker(JobService jobService, RenderService renderService, WorkerLockService workerLockService) {
         this.jobService = jobService;
         this.renderService = renderService;
+        this.workerLockService = workerLockService;
     }
 
     @Scheduled(fixedDelayString = "${worker.poll-delay-ms:3000}")
-    public void processNextJob() {
-        Optional<Job> claimedJob = jobService.claimNextJob();
-        claimedJob.ifPresent(job -> {
-            log.info("Job claimed for processing: {} (attempt {})", job.getId(), job.getAttempts());
-            render(job);
-        });
-    }
+    @Transactional
+    public void processNextJob() throws InterruptedException, RenderService.TransientRenderException {
+        Optional<WorkerLockService.LockHandle> lock = workerLockService.tryAcquire();
 
+        if (lock.isEmpty()) {
+            log.debug("Another worker instance is currently processing a job. Skipping this poll.");
+            return;
+        }
+
+        try (WorkerLockService.LockHandle ignored = lock.get()) {
+            Optional<Job> claimedJob = jobService.claimNextJob();
+
+            if (claimedJob.isPresent()) {
+                Job job = claimedJob.get();
+                log.info("Job claimed for processing: {} (attempt {})", job.getId(), job.getAttempts());
+                render(job);
+            } else {
+                log.debug("No queued jobs available.");
+            }
+        }
+    }
     private void render(Job job) {
         try {
             String result = renderService.render(job);

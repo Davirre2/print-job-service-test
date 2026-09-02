@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
+  app1:
     build: .
     ports:
       - "8080:8080"
@@ -25,6 +25,22 @@ services:
       DB_NAME: printservice
       DB_USER: printservice
       DB_PASSWORD: printservice
+      WORKER_LOCK_STRATEGY: postgres-advisory
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app2:
+    build: .
+    ports:
+      - "8082:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: printservice
+      DB_USER: printservice
+      DB_PASSWORD: printservice
+      WORKER_LOCK_STRATEGY: postgres-advisory
     depends_on:
       postgres:
         condition: service_healthy

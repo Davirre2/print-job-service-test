@@ -20,10 +20,15 @@ public class JobService {
 
     private final JobRepository jobRepository;
     private final RenderTemplateRepository renderTemplateRepository;
+    private final JobProcessingService jobProcessingService;
+    private final RenderService renderService;
 
-    public JobService(JobRepository jobRepository, RenderTemplateRepository renderTemplateRepository) {
+    public JobService(JobRepository jobRepository, RenderTemplateRepository renderTemplateRepository,
+                      JobProcessingService jobProcessingService, RenderService renderService) {
         this.jobRepository = jobRepository;
         this.renderTemplateRepository = renderTemplateRepository;
+        this.jobProcessingService = jobProcessingService;
+        this.renderService = renderService;
     }
 
     /**
@@ -48,15 +53,8 @@ public class JobService {
      * The transaction ends before the actual render begins.
      */
     @Transactional
-    public Optional<Job> claimNextJob() {
-        return jobRepository.findFirstByStatusOrderByCreatedAtAsc(JobStatus.QUEUED)
-                .map(job -> {
-                    job.setStatus(JobStatus.PROCESSING);
-                    job.setAttempts(job.getAttempts() + 1);
-                    job.setErrorMessage(null);
-                    job.setUpdatedAt(Instant.now());
-                    return jobRepository.save(job);
-                });
+    public Optional<Job> claimNextJob() throws InterruptedException, RenderService.TransientRenderException {
+        return jobProcessingService.processNextJob();
     }
 
     @Transactional(readOnly = true)
@@ -69,6 +67,16 @@ public class JobService {
         return status
                 .map(jobRepository::findAllByStatusOrderByCreatedAtAsc)
                 .orElseGet(jobRepository::findAllByOrderByCreatedAtAsc);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasAnyJobProcessing() {
+        return jobRepository.existsByStatus(JobStatus.PROCESSING);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasQueuedJobs() {
+        return jobRepository.existsByStatus(JobStatus.QUEUED);
     }
 
     @Transactional

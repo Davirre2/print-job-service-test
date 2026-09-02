@@ -24,7 +24,7 @@ class JobWorkerTest {
     private JobRepository jobRepository;
 
     @Test
-    void workerProcessesQueuedJobWithoutHttpRequest() {
+    void workerProcessesQueuedJobWithoutHttpRequest() throws InterruptedException, RenderService.TransientRenderException {
         Job submitted = jobService.submitJob(INVOICE_TEMPLATE_ID, java.util.Map.of("recipient", "test"));
 
         jobWorker.processNextJob();
