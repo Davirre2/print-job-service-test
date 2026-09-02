@@ -1,6 +1,7 @@
 package com.adobe.printservice.web;
 
 import com.adobe.printservice.web.dto.HealthStatusResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,8 +52,9 @@ public class HealthResource {
 
         String globalStatus = isReady ? "UP" : "DOWN";
 
-        // Always returns the breakdown
-        return ResponseEntity.ok(new HealthStatusResponse(globalStatus, isReady, checks));
+        HttpStatus status = isReady ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+        return ResponseEntity.status(status)
+                .body(new HealthStatusResponse(globalStatus, isReady, checks));
     }
 
     private boolean checkDatabaseConnection() {

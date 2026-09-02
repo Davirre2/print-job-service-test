@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: print-job-service
+  labels:
+    app: print-job-service
+spec:
+  # Two replicas to simulate the multiple users using the app.
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: print-job-service
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  template:
+    metadata:
+      labels:
+        app: print-job-service
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: print-job-service
+          image: print-job-service:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          env:
+            - name: DB_HOST
+              value: postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: printservice
+            - name: DB_USER
+              value: printservice
+            - name: DB_PASSWORD
+              value: printservice
+
+            - name: WORKER_LOCK_STRATEGY
+              value: postgres-advisory
+
+            - name: WORKER_POLL_DELAY_MS
+              value: "5000"
+            - name: RENDER_DELAY_MS
+              value: "10000"
+            - name: RENDER_TRANSIENT_FAILURE_PROBABILITY
+              value: "0"
+
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+            successThreshold: 1
+
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+            successThreshold: 1
+
+          startupProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+            successThreshold: 1
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: print-job-service
+  labels:
+    app: print-job-service
+spec:
+  type: ClusterIP
+
+  selector:
+    app: print-job-service
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
