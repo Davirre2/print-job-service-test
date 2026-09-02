@@ -66,8 +66,8 @@ public class JobResource {
         }
 
         if (job.getStatus() != JobStatus.DONE) {
-            throw new IllegalArgumentException(
-                    "Job processing not finished yet"
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Job processing not finished yet"
             );
         }
 
