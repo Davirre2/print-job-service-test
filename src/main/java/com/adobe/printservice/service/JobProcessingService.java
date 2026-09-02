@@ -25,6 +25,7 @@ public class JobProcessingService {
         if (firstJob.isPresent()) {
             Job job = firstJob.get();
             job.setStatus(JobStatus.PROCESSING);
+            job.setAttempts(job.getAttempts() + 1);
             job.setUpdatedAt(Instant.now());
             jobRepository.save(job);
         }
